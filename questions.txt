@@ -1,0 +1,45 @@
+Dans le module kubernetes, dans le fichier de configuration eks.tf il y a ceci :
+"provider_url                  = module.eks.oidc_provider". A quoi est-ce que cela correspond ?
+
+Est-ce que ces parties sont obligatoires ? Concrètement a quoi servent-elles ? :
+data "aws_iam_policy" "ebs_csi_policy" {
+  arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
+
+module "irsa-ebs-csi" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
+  version = "4.7.0"
+
+  create_role                   = true
+  role_name                     = "AmazonEKSTFEBSCSIRole-${var.Cluster_name}"
+  provider_url                  = module.eks.oidc_provider
+  role_policy_arns              = [data.aws_iam_policy.ebs_csi_policy.arn]
+  oidc_fully_qualified_subjects = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
+}
+
+resource "aws_eks_addon" "ebs-csi" {
+  cluster_name             = var.Cluster_name
+  addon_name               = "aws-ebs-csi-driver"
+  addon_version            = "v1.5.2-eksbuild.1"
+  service_account_role_arn = module.irsa-ebs-csi.iam_role_arn
+  tags = {
+    "eks_addon" = "ebs-csi"
+    "terraform" = "true"
+  }
+}
+
+Le module EKS de AWS créé automatiquement des ressources "aws_eks_node_group" ? Qu'est ce que la ressource "aws_eks_node_group" ? Je demande ceci parce que dans mon fichier de configuration EKS, je ne vois pas la création de "aws_eks_node_group" mais pourtant dans le github "https://github.com/nwokoloemmanuel6/sock-shop-and-voting-application/tree/main/eks" je vois qu'il y a un fichier pour le cluster et un fichier pour les aws_eks_node_group.
+
+https://github.com/nwokoloemmanuel6/sock-shop-and-voting-application/tree/main : Dépôt GitHub dans lequel il y a les fichiers pour la configuration EKS et les fichiers de configurations Kubernetes pour tout les services et prometheus. Ce github a été trouvé parce qu'il a été cité dans l'article de configuration de prometheus avec HGelm et Terraform. Cet article est juste en dessous, c'est le suivant.
+
+https://medium.com/@CloudTopG/how-to-install-prometheus-and-grafana-on-your-cluster-using-terraform-and-helm-f74c3dff3c : Article qui explique comment installer prometheus avec Helm en utilisant terraform
+
+https://blog.devops.dev/how-to-provision-your-eks-cluster-using-terraform-7b086f9a9848 : Artcile qui explique comment provisionner un EKS
+
+https://medium.com/@CloudTopG/unleash-the-power-of-kubernetes-with-terraform-deploy-sock-shop-microservice-like-a-pro-572670a0d28f : Article qui donne des fichiers de configuration Kubernetes pour les déploiements des diiférents services.
+
+To Do :
+Réussir à configurer kubectl avec Ansible = fait
+Monitorer le Bastion et si possible les RDS
+Les informations de connexion ne doivent pas être en clair = il reste Ansbile vault et le mdp de la db
+Utiliser une clé dynamique pour la connexion avec le bastion 

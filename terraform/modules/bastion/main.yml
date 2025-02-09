@@ -1,0 +1,15 @@
+- become: yes
+  hosts: all
+  name: Configure Bastion
+  tasks:
+    - name: Install updates
+      apt:
+        update_cache: yes
+        upgrade: dist
+    - name: Install basic packages
+      apt:
+        name:
+          - git
+          - curl
+          - vim
+        state: present

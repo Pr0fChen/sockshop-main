@@ -1,0 +1,9 @@
+namespace: "sock-shop"
+cert_name: "sock-tls"
+secret_name: "sock-tls-secret"
+issuer_name: "letsencrypt"
+email: "mhnz@gmail.com"
+host: "sock.mhnz.cloudns.ph"
+backend_service_name: "front-end"
+backend_service_port: 80
+s3_bucket_name: "mhnz-bucket-sock-shop"

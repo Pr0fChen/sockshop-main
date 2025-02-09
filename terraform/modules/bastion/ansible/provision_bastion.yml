@@ -1,0 +1,205 @@
+---
+- hosts: all
+  become: yes
+  collections:
+  - amazon.aws
+  tasks:
+    - name: Include Vault variables
+      include_vars: vars-vault.yml
+      no_log: true
+
+    - name: Install dependencies
+      apt:
+        name:
+          - curl
+          - unzip
+        state: present
+        update_cache: yes
+
+    - name: Download the AWS CLI v2 bundle
+      get_url:
+        url: "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+        dest: "/tmp/awscliv2.zip"
+
+    - name: Unarchive the AWS CLI installer
+      unarchive:
+        src: "/tmp/awscliv2.zip"
+        dest: "/tmp/"
+        remote_src: yes
+
+    - name: Install AWS CLI v2
+      shell: "/tmp/aws/install"
+      args:
+        creates: /usr/local/bin/aws
+
+    - name: Verify AWS CLI installation
+      command: aws --version
+
+    - name: Configure AWS CLI
+      shell: "aws configure set {{ item.key }} {{ item.value }} --profile {{ aws_profile }}"
+      loop:
+        - { key: 'aws_access_key_id', value: "{{ aws_access_key }}" }
+        - { key: 'aws_secret_access_key', value: "{{ aws_secret_key }}" }
+        - { key: 'region', value: "{{ aws_region }}" }
+        - { key: 'format', value: "{{ aws_format }}" }
+      no_log: true
+      changed_when: false
+      become_user: ubuntu
+      environment:
+        AWS_PROFILE: "{{ aws_profile }}"
+    
+    - name: Download kubectl
+      get_url:
+        url: "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
+        dest: "./"
+        mode: '0755'
+
+    - name: Install kubectl
+      shell: install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+    
+    - name: Configure EKS
+      shell: "aws eks update-kubeconfig --region {{ region }}  --name {{ cluster_name }} --profile {{ aws_profile }}"
+      become_user: ubuntu
+
+    - name: Configure EKS
+      shell: AWS_PROFILE={{ aws_profile }} aws eks update-kubeconfig --region {{ region }} --name {{ cluster_name }} --kubeconfig /home/ubuntu/.kube/config
+      become_user: ubuntu
+
+    - name: Include Ingress variables
+      include_vars: vars-ingress.yml
+
+    - name: Copy generated files to bastion
+      template:
+        src: "templates/{{ item }}.j2"
+        dest: /tmp/{{ item }}
+      with_items:
+        - ingress.yaml
+        - certificate.yaml
+        - clusterissuer.yaml
+
+    - name: Download Helm binary
+      get_url:
+        url: https://get.helm.sh/helm-v3.12.0-linux-amd64.tar.gz
+        dest: /tmp/helm.tar.gz
+
+    - name: Extract Helm binary
+      unarchive:
+        src: /tmp/helm.tar.gz
+        dest: /tmp
+        remote_src: yes
+
+    - name: Move Helm to /usr/local/bin
+      command: mv /tmp/linux-amd64/helm /usr/local/bin/helm
+
+    - name: Ensure Helm is executable
+      file:
+        path: /usr/local/bin/helm
+        mode: '0755'
+
+    - name: Add ingress-nginx Helm repo
+      command: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+      register: result
+      changed_when: "'repository' in result.stdout"
+      become_user: ubuntu
+
+    - name: Update Helm repos
+      command: helm repo update
+      become_user: ubuntu
+
+    - name: Configure EKS
+      shell: AWS_PROFILE={{ aws_profile }} aws eks update-kubeconfig --region {{ region }} --name {{ cluster_name }} --kubeconfig /home/ubuntu/.kube/config
+      become_user: ubuntu
+
+    - name: Test Kubernetes connection
+      shell: "KUBECONFIG=/home/ubuntu/.kube/config kubectl get nodes"
+      become_user: ubuntu
+
+    # - name: Install ingress-nginx Helm chart
+    #   command: >
+    #     helm install ingress-nginx ingress-nginx/ingress-nginx
+    #     --namespace ingress-nginx --create-namespace
+    #     --set controller.service.type=LoadBalancer
+    #     --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-backend-protocol"="tcp"
+    #     --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-cross-zone-load-balancing-enabled"="true"
+    #     --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb"
+    #   environment:
+    #     KUBECONFIG: /home/ubuntu/.kube/config
+    #   become_user: ubuntu
+    #   ignore_errors: true
+
+    - name: Add jetstack Helm repo
+      command: helm repo add jetstack https://charts.jetstack.io
+      register: result
+      changed_when: "'repository' in result.stdout"
+      become_user: ubuntu
+
+    - name: Update Helm repos
+      command: helm repo update
+      become_user: ubuntu
+
+    - name: Install cert-manager Helm chart
+      command: >
+        helm install cert-manager jetstack/cert-manager
+        --namespace cert-manager --create-namespace
+        --version v1.11.0
+        --set installCRDs=true
+      environment:
+        KUBECONFIG: /home/ubuntu/.kube/config
+      become_user: ubuntu
+      ignore_errors: true
+
+    - name: Create Namespace
+      command: >
+        kubectl create ns sock-shop
+      environment:
+        KUBECONFIG: /home/ubuntu/.kube/config
+      become_user: ubuntu
+
+    - name: Deploy files
+      command: >
+        kubectl apply -f /tmp/{{ item }}
+      with_items:
+        - ingress.yaml
+        - certificate.yaml
+        - clusterissuer.yaml
+      environment:
+        KUBECONFIG: /home/ubuntu/.kube/config
+      become_user: ubuntu
+
+    - name: Generate PVC for each service
+      template:
+        src: templates/pvc.yaml.j2
+        dest: /tmp/{{ service_name }}.yaml 
+      vars:
+        service_name: "{{ item }}"
+      with_items:
+        - cart-db-pvc
+        - catalogue-db-pvc
+        - orders-db-pvc
+        - session-db-pvc
+        - user-db-pvc
+        - rabbitmq-pvc
+
+
+    - name: Deploy metrics-server
+      command: >
+        kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+      environment:
+        KUBECONFIG: /home/ubuntu/.kube/config
+      become_user: ubuntu
+
+    - name: Deploy PVC 
+      command: >
+        kubectl apply -f /tmp/{{ service_name }}-pvc.yaml
+      vars:
+        service_name: "{{ item }}"
+      with_items:
+        - cart-db
+        - catalogue-db
+        - orders-db
+        - session-db
+        - user-db
+        - rabbitmq
+      environment:
+        KUBECONFIG: /home/ubuntu/.kube/config
+      become_user: ubuntu

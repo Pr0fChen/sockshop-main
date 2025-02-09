@@ -1,0 +1,274 @@
+# Global values
+carts:
+  replicaCount: 1
+  
+  image:
+    repository: weaveworksdemos/carts
+    tag: "0.4.8"
+    pullPolicy: IfNotPresent
+  
+  resources:
+    limits:
+      cpu: 300m
+      memory: 500Mi
+    requests:
+      cpu: 100m
+      memory: 200Mi
+  
+  service:
+    type: ClusterIP
+    port: 80
+  
+  db:
+    image: mongo
+    port: 27017
+  
+  nodeSelector:
+    beta.kubernetes.io/os: linux
+
+
+catalogue:
+  replicaCount: 1
+  
+  image:
+    repository: weaveworksdemos/catalogue
+    tag: "0.3.5"
+    pullPolicy: IfNotPresent
+  
+  db:
+    image: weaveworksdemos/catalogue-db
+    tag: "0.3.0"
+    port: 3306
+  
+  resources:
+    limits:
+      cpu: 200m
+      memory: 200Mi
+    requests:
+      cpu: 100m
+      memory: 100Mi
+  
+  service:
+    type: ClusterIP
+    port: 80
+  
+  nodeSelector:
+    beta.kubernetes.io/os: linux
+  
+
+frontend:  
+  replicaCount: 1
+  
+  image:
+    repository: weaveworksdemos/front-end
+    tag: "0.3.12"
+    pullPolicy: IfNotPresent
+  
+  resources:
+    limits:
+      cpu: 300m
+      memory: 1000Mi
+    requests:
+      cpu: 100m
+      memory: 300Mi
+  
+  service:
+    type: NodePort
+    port: 80
+    targetPort: 8079
+    nodePort: 30001
+  
+  env:
+    sessionRedis: "true"
+  
+  nodeSelector:
+    beta.kubernetes.io/os: linux
+
+orders:  
+  replicaCount: 1
+  
+  image:
+    repository: weaveworksdemos/orders
+    tag: "0.4.7"
+    pullPolicy: IfNotPresent
+  
+  resources:
+    limits:
+      cpu: 500m
+      memory: 500Mi
+    requests:
+      cpu: 100m
+      memory: 300Mi
+  
+  service:
+    type: ClusterIP
+    port: 80
+  
+  db:
+    image: mongo
+    port: 27017
+  
+  nodeSelector:
+    beta.kubernetes.io/os: linux
+  
+
+payments:  
+  replicaCount: 1
+  
+  image:
+    repository: weaveworksdemos/payment
+    tag: "0.4.3"
+    pullPolicy: IfNotPresent
+  
+  resources:
+    limits:
+      cpu: 200m
+      memory: 200Mi
+    requests:
+      cpu: 99m
+      memory: 100Mi
+  
+  service:
+    type: ClusterIP
+    port: 80  # Déplacement de la variable "port" sous "payments.service"
+  
+  nodeSelector:
+    beta.kubernetes.io/os: linux
+  
+
+queue:  
+  replicaCount: 1
+  
+  image:
+    repository: weaveworksdemos/queue-master
+    tag: "0.3.1"
+    pullPolicy: IfNotPresent
+  
+  resources:
+    limits:
+      cpu: 300m
+      memory: 500Mi
+    requests:
+      cpu: 100m
+      memory: 300Mi
+  
+  service:
+    type: ClusterIP
+    port: 80
+  
+  env:
+    JAVA_OPTS: "-Xms64m -Xmx128m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom -Dspring.zipkin.enabled=false"
+  
+  nodeSelector:
+    beta.kubernetes.io/os: linux
+  
+
+rabbit:  
+  replicaCount: 1
+  
+  rabbitmq:
+    image:
+      repository: rabbitmq
+      tag: "3.6.8-management"
+      pullPolicy: IfNotPresent
+    ports:
+      management: 15672
+      rabbitmq: 5672
+  
+  exporter:
+    image:
+      repository: kbudde/rabbitmq-exporter
+      tag: latest
+      pullPolicy: IfNotPresent
+    port: 9090
+  
+  resources: {}
+  
+  service:
+    type: ClusterIP
+  
+  nodeSelector:
+    beta.kubernetes.io/os: linux
+  
+
+session:  
+  replicaCount: 1
+  
+  image:
+    repository: redis
+    tag: "alpine"
+    pullPolicy: IfNotPresent
+  
+  pvc:
+    claimName: session-db-pvc
+  
+  resources: {}
+  
+  service:
+    type: ClusterIP
+    port: 6379
+  
+  nodeSelector: {}
+
+user:  
+  replicaCount: 1
+  
+  image:
+    repository: weaveworksdemos/user
+    tag: "0.4.7"
+    pullPolicy: IfNotPresent
+  
+  db:
+    image:
+      repository: weaveworksdemos/user-db
+      tag: "0.3.0"
+    port: 27017
+  
+  resources:
+    limits:
+      cpu: 300m
+      memory: 200Mi
+    requests:
+      cpu: 100m
+      memory: 100Mi
+  
+  mongo:
+    host: user-db
+    port: 27017
+  
+  service:
+    type: ClusterIP
+    port: 80
+  
+  pvc:
+    claimName: user-db-pvc
+  
+  nodeSelector: {}
+
+shipping:
+  replicaCount: 1
+  
+  image:
+    repository: weaveworksdemos/shipping
+    tag: "0.4.8"
+    pullPolicy: IfNotPresent
+  
+  resources:
+    limits:
+      cpu: 300m
+      memory: 500Mi
+    requests:
+      cpu: 100m
+      memory: 300Mi
+  
+  env:
+    zipkin: "zipkin.jaeger.svc.cluster.local"
+    java_opts: "-Xms64m -Xmx128m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom -Dspring.zipkin.enabled=false"
+  
+  service:
+    type: ClusterIP
+    port: 80
+  
+  nodeSelector:
+    beta.kubernetes.io/os: linux
+  

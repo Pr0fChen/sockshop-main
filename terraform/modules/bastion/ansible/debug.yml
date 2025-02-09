@@ -1,0 +1,50 @@
+---
+- hosts: all
+  become: yes
+  collections:
+  - amazon.aws
+  tasks:
+    - name: Include Vault variables2
+      include_vars: vars-vault.yml
+
+    - name: Include Ingress variables
+      include_vars: vars-ingress.yml
+
+    - name: Render S3 policy template 
+      template:
+        src: "./templates/s3-csi-policy.json.j2"
+        dest: "/tmp/s3-csi-policy.json"
+
+    - name: Policy
+      command: >
+        aws iam create-policy --policy-name AmazonS3CSIPolicy --policy-document file:///tmp/s3-csi-policy.json
+      become_user: ubuntu
+      ignore_errors: true
+
+    - name: Render S3 policy template 
+      template:
+        src: "./templates/trust-policy.json.j2"
+        dest: "/tmp/trust-policy.json"
+
+    - name: Role
+      command: >
+        aws iam create-role --role-name AmazonS3CSIRole --assume-role-policy-document file:///tmp/trust-policy.json
+      become_user: ubuntu
+      ignore_errors: true
+
+    - name: Attach IAM policy to EKS node role
+      command: >
+        aws iam attach-role-policy --role-name AmazonS3CSIRole --policy-arn arn:aws:iam::{{ aws_account_id }}:policy/AmazonS3CSIPolicy
+      become_user: ubuntu
+      ignore_errors: true
+
+    - name: Associate role with the service account used by the CSI driver
+      command: >
+        eksctl create iamserviceaccount 
+        --name s3-csi-controller-sa
+        --namespace kube-system 
+        --cluster {{ cluster_name }}
+        --attach-role-arn arn:aws:iam::{{ aws_account_id }}:role/AmazonS3CSIRole 
+        --approve 
+        --override-existing-serviceaccounts
+      become_user: ubuntu

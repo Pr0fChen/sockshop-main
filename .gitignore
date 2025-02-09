@@ -1,0 +1,9 @@
+<<<<<<< HEAD
+# Terraform State Files
+*.tfstate
+*.tfstate.*
+
+/terraform/.terraform/
+=======
+terraform/modules/bastion/ansible/vars.yml
+>>>>>>> 4ff355f (Add secrets to .gitignore)
